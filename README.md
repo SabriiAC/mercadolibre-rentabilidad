@@ -6,7 +6,7 @@ En e-commerce muchas veces se mira solo el precio de venta y se asume un margen 
 
 ---
 
-## 📂 De dónde salieron los datos y cómo los procesé
+## De dónde salieron los datos y cómo los procesé
 
 En lugar de usar un dataset genérico de internet, decidí recolectar datos reales de Mercado Libre sobre 8 categorías de tecnología:
 * Cargadores de pared
@@ -31,7 +31,7 @@ Los datos crudos tenían varios errores típicos de scraping que corregí en est
 
 ---
 
-## 💰 El modelo de costos: reglas y supuestos de simulación (`03_modelo_financiero.py`)
+## El modelo de costos: reglas y supuestos de simulación (`03_modelo_financiero.py`)
 
 Para estimar el margen unitario me basé en la estructura tarifaria de referencia del portal oficial de vendedores de Mercado Libre Argentina (guía de costos #870):
 
@@ -50,7 +50,7 @@ Para evaluar los resultados con rigor profesional, es importante distinguir qué
 
 ---
 
-## 📊 Visualización en Power BI
+## Visualización en Power BI
 
 ![Dashboard Ejecutivo](dashboard_simulador.png)
 
@@ -63,7 +63,7 @@ Armé el dashboard interactivo en Power BI (`dashboard.pbix`) para facilitar la 
 
 ---
 
-## 💡 Conclusiones y recomendaciones comerciales
+## Conclusiones y recomendaciones comerciales
 
 Al cruzar margen estimado, presencia de marcas informadas y costos de envío, encontré 5 conclusiones claras:
 
@@ -75,29 +75,7 @@ Al cruzar margen estimado, presencia de marcas informadas y costos de envío, en
 
 ---
 
-## 🛠️ Cómo reproducir el proyecto localmente
-
-El análisis es 100% reproducible. Para ejecutar la tubería completa desde cero:
-
-```bash
-# 1. Clonar el repositorio
-git clone https://github.com/SabriiAC/mercadolibre-rentabilidad.git
-cd mercadolibre-rentabilidad
-
-# 2. Instalar dependencias necesarias
-pip install pandas numpy
-
-# 3. Ejecutar los scripts en orden
-python scripts/01_extraer_datos_simulador.py
-python scripts/02_limpieza.py
-python scripts/03_modelo_financiero.py
-```
-
-Al terminar, los scripts procesan los archivos crudos en `data/raw/` y generan automáticamente el archivo final `simulador_meli_dataset_final.csv` con las 2.599 publicaciones y sus métricas calculadas.
-
----
-
-## 📁 Estructura del repositorio
+## Estructura del repositorio
 
 * `data/raw/`: Archivos CSV originales obtenidos de la recolección por categoría.
 * `scripts/`: Tubería de datos modular en Python:
