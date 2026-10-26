@@ -1,18 +1,25 @@
 import pandas as pd
 import numpy as np
+from pathlib import Path
 
 print("==========================================================")
 print("=== FASE 2: LIMPIEZA, CALIDAD Y NORMALIZACIÓN (SILVER) ===")
 print("==========================================================")
 
-# 1. Carga del dataset crudo unificado 
-input_file = 'simulador_meli_raw.csv'
+# Configuración de rutas relativas reproducibles
+BASE_DIR = Path(__file__).resolve().parent.parent
+DATA_DIR = BASE_DIR / "data"
+
+input_file = DATA_DIR / 'simulador_meli_raw.csv'
+if not input_file.exists():
+    input_file = BASE_DIR / 'simulador_meli_raw.csv'
+
 try:
     df = pd.read_csv(input_file)
     print(f"Archivo cargado exitosamente: {input_file} ({len(df)} registros)")
 except FileNotFoundError:
     print(f"Error: No se encontró el archivo '{input_file}'. Ejecutá primero el Script 01.")
-    exit()
+    exit(1)
 
 # 2. Control de Calidad de Precios 
 # Corrige pérdidas de escala de miles provenientes de parseos flotantes previos 
@@ -33,7 +40,9 @@ filas_iniciales = len(df)
 df_limpio = df.drop_duplicates(subset=['Categoria', 'Titulo']).copy()
 duplicados_removidos = filas_iniciales - len(df_limpio)
 
-# 4. Creación de Banderas de Negocio y Clasificación de Vendedor
+# 4. Clasificación de Vendedor
+# Documentación metodológica: Clasifica si la publicación cuenta con marca o nombre de vendedor informado
+# frente a registros sin identificar ('Vendedor Particular').
 df_limpio['Vendedor'] = df_limpio['Vendedor'].fillna('Vendedor Particular').astype(str).str.strip()
 df_limpio['EsTiendaOficial'] = df_limpio['Vendedor'].apply(
     lambda v: 0 if v.lower() in ['vendedor particular', 'particular', 'nan', ''] else 1
@@ -56,8 +65,8 @@ columnas_ordenadas = [
 ]
 df_silver = df_limpio[columnas_ordenadas]
 
-# 6. Exportación 
-output_file = 'simulador_meli_limpio.csv'
+# 6. Exportación
+output_file = DATA_DIR / 'simulador_meli_limpio.csv'
 df_silver.to_csv(output_file, index=False)
 
 print("\n================ RESUMEN DE CONTROL DE CALIDAD ================")

@@ -36,8 +36,9 @@ Captura de pantalla*
 gt-rental-auto/
 *.docx
 
-# Archivos crudos pesados de scraping y revisiones intermedias
-cat_*.csv
+# Archivos crudos en la raíz (se conservan en data/raw/)
+/cat_*.csv
+!data/raw/cat_*.csv
 simulador_meli_raw.csv
 simulador_meli_limpio.csv
 errores_extraccion.csv

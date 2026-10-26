@@ -1,10 +1,16 @@
 import pandas as pd
-import glob
+from pathlib import Path
 import re
 
 print("==========================================================")
 print("===           INGESTA Y REGISTRO DE ERRORES            ===")
 print("==========================================================")
+
+# Configuración de rutas relativas reproducibles
+BASE_DIR = Path(__file__).resolve().parent.parent
+RAW_DIR = BASE_DIR / "data" / "raw"
+DATA_DIR = BASE_DIR / "data"
+DATA_DIR.mkdir(parents=True, exist_ok=True)
 
 files_map = {
     'cat_1_soporte.csv': 'Soportes para Notebook',
@@ -23,7 +29,7 @@ counter = 1
 
 def extraer_precio_real(row):
     """
-    Extracción robusta de precios en Mercado Libre:
+    Extracción de precios en Mercado Libre:
     - f1 (andes-money-amount__fraction): Precio de catálogo / lista.
     - f2 (andes-money-amount__fraction 2): Precio con descuento cuando existe oferta.
     - Evita falsos positivos con palabras como 'Office' o 'Official'.
@@ -44,7 +50,6 @@ def extraer_precio_real(row):
     p1 = parse_num(f1_raw)
     p2 = parse_num(f2_raw)
 
-    # Si existen ambos precios: si p2 es menor que p1 (oferta), tomar p2
     if p1 is not None and p2 is not None:
         if p2 < p1 and p2 >= 500:
             return p2
@@ -57,10 +62,15 @@ def extraer_precio_real(row):
 
     return None
 
-for file_path, category_name in files_map.items():
+for file_name, category_name in files_map.items():
+    # Buscar primero en data/raw/, sino en la raíz
+    file_path = RAW_DIR / file_name
+    if not file_path.exists():
+        file_path = BASE_DIR / file_name
+
     try:
         df = pd.read_csv(file_path)
-        print(f"\nProcesando: {file_path} ({category_name}) - {len(df)} filas crudas...")
+        print(f"\nProcesando: {file_name} ({category_name}) - {len(df)} filas crudas...")
         
         for idx, row in df.iterrows():
             numero_fila_csv = idx + 2  # Fila considerando el encabezado
@@ -69,13 +79,12 @@ for file_path, category_name in files_map.items():
             title = row.get('poly-component__title', '')
             if pd.isna(title) or not str(title).strip():
                 error_info = {
-                    'Archivo': file_path,
+                    'Archivo': file_name,
                     'Fila_CSV': numero_fila_csv,
                     'Motivo': 'Título faltante o vacío',
                     'Detalle': 'Columna poly-component__title sin datos'
                 }
                 discarded_rows.append(error_info)
-                print(f"  [ERROR] Fila {numero_fila_csv} en {file_path}: Título vacío. Fila descartada.")
                 continue
                 
             title = str(title).strip()
@@ -84,13 +93,12 @@ for file_path, category_name in files_map.items():
             price_ars = extraer_precio_real(row)
             if price_ars is None:
                 error_info = {
-                    'Archivo': file_path,
+                    'Archivo': file_name,
                     'Fila_CSV': numero_fila_csv,
                     'Motivo': 'Precio no numérico o ausente',
                     'Detalle': f"Título: {title[:45]}..."
                 }
                 discarded_rows.append(error_info)
-                print(f"  [ERROR] Fila {numero_fila_csv} en {file_path}: Sin precio válido ('{title[:30]}...').")
                 continue
                 
             # 3. Extracción de Vendedor
@@ -116,22 +124,22 @@ for file_path, category_name in files_map.items():
             counter += 1
             
     except Exception as e:
-        print(f"[ERROR CRITICO] No se pudo leer {file_path}: {e}")
+        print(f"[ERROR CRITICO] No se pudo leer {file_name}: {e}")
 
-# Exportar dataset limpio
+# Exportar dataset crudo unificado
 df_final = pd.DataFrame(all_rows)
-output_clean = 'simulador_meli_raw.csv'
-df_final.to_csv(output_clean, index=False)
+output_raw = DATA_DIR / 'simulador_meli_raw.csv'
+df_final.to_csv(output_raw, index=False)
 
 # Exportar log de errores
 df_errores = pd.DataFrame(discarded_rows)
-output_errores = 'errores_extraccion.csv'
+output_errores = DATA_DIR / 'errores_extraccion.csv'
 df_errores.to_csv(output_errores, index=False)
 
 print("\n==========================================================")
-print(f"INGESTA FINALIZADA CON EXITO:")
+print(f"INGESTA FINALIZADA CON ÉXITO:")
 print(f"   - Registros válidos procesados: {len(df_final)}")
 print(f"   - Registros descartados con error: {len(df_errores)}")
-print(f"   - Archivo consolidado generado: {output_clean}")
+print(f"   - Archivo consolidado generado: {output_raw}")
 print(f"   - Log de errores generado: {output_errores}")
 print("==========================================================")
