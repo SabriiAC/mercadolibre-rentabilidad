@@ -73,7 +73,7 @@ Al cruzar margen neto, nivel de competencia de tiendas oficiales y costos de env
 
 * `dashboard.pbix`: Archivo de Power BI Desktop con el modelo de datos, medidas DAX y visualizaciones.
 * `dashboard_simulador.png`: Captura de pantalla en alta resolución del reporte.
-* `SCRIPTS`: Carpeta con los scripts de Python:
+* `scripts/`: Carpeta con los scripts de Python:
   * `01_extraer_datos_simulador.py`: Ingesta y consolidación de los archivos por categoría.
   * `02_limpieza.py`: Limpieza de formatos, corrección de escalas y duplicados.
   * `03_modelo_financiero.py`: Cálculo de comisiones, fletes, costo FOB y márgenes.
