@@ -1,116 +1,80 @@
-# Caso de Estudio: Simulador de Rentabilidad & E-Commerce Arbitrage en Mercado Libre Argentina
+# Simulador de Rentabilidad y Retail Arbitrage en Mercado Libre Argentina
 
-> **Perfil:** Data Analytics Junior / Business Intelligence  
-> **Herramientas:** Python (Pandas, numpy), Power BI (PBIP, PBIR, TMDL, DAX), Web Scraping (Browser Tool / Ingesta de Datos), Git  
-> **Dataset:** Recolección propia vía Web Scraping por lotes (+2.500 publicaciones vivas)  
-> **Reglas de Negocio:** Tarifas Oficiales Portal de Vendedores Mercado Libre (#870)
+Proyecto de portfolio enfocado en responder una pregunta comercial concreta: **si una persona quiere empezar a revender tecnología en Mercado Libre con poco capital, ¿en qué categoría le conviene entrar y en cuál no?**
 
----
-
-## 1. El Problema de Negocio (Por qué no usé un dataset de Kaggle)
-
-Cuando armé este proyecto para mi portfolio, no quería caer en el clásico dataset del Titanic o de ventas ficticias de bicicletas. Quería resolver una **pregunta de negocio real, con datos reales y desordenados** del mercado argentino:
-
-> *"Si una persona quiere empezar a emprender revendiendo tecnología en Mercado Libre Argentina con un capital limitado (Retail Arbitrage), ¿en qué categoría le conviene meterse, en cuál NO y por qué?"*
-
-Para responder esto no alcanzaba con saber a cuánto se vende un producto: en el e-commerce argentino, si no calculás la comisión por tipo de publicación, el costo fijo por unidad, el flete obligatorio de Mercado Envíos y el costo de reposición mayorista, **podés creer que estás ganando dinero cuando en realidad estás perdiendo**.
+En e-commerce muchas veces se mira solo el precio de venta y se asume un margen fijo. En la práctica, entre la comisión de la plataforma, el costo fijo por unidad, los envíos obligatorios y el costo de reposición, un producto que parece rentable en los papeles puede terminar dando pérdida.
 
 ---
 
-## 2. Pipeline de Datos: De la Web al Modelo (Arquitectura Medallion)
+##  De dónde salieron los datos y cómo los procesé
 
-El proyecto se estructuró en un flujo de datos de tres capas en Python:
+En lugar de usar un dataset genérico de internet, decidí recolectar datos reales de Mercado Libre sobre 8 categorías de tecnología:
+* Cargadores de pared
+* Cables USB
+* Soportes para notebook
+* Auriculares inalámbricos
+* Smartwatches
+* Parlantes Bluetooth
+* Powerbanks
+* Teclados mecánicos
 
-```
-[ Extracción Web por Lotes: 8 categorías (Archivos cat_1 a cat_8) ]
-              ↓
-  Capa Bronze: Ingesta y Parsing de selectores DOM (01_extraer_datos_simulador.py)
-              ↓
-  Capa Silver: Limpieza de duplicados y Calidad (02_limpieza.py)
-              ↓
-  Capa Gold: Modelo Financiero (Basado en el PORTAL OFICIAL VENDEDORES MERCADO LIBRE) (03_modelo_financiero.py)
-              ↓
-  Dashboard Power BI 
-```
+### Extracción e ingesta
+Descargué las publicaciones con una extensión de scraping en el navegador, obteniendo 8 archivos CSV (uno por cada categoría) con más de 3.600 publicaciones en bruto.
 
-### Fase 1: Extracción Web e Ingesta Automatizada (`01_extraer_datos_simulador.py`)
-* **Extracción por lotes:** Relevamiento de 8 categorías clave de accesorios tech (*Cargadores de pared, Cables USB, Soportes para notebook, Auriculares inalámbricos, Smartwatches, Parlantes Bluetooth, Powerbanks y Teclados mecánicos*) utilizando una herramienta de web scraping en navegador, generando las capturas crudas por categoría (`cat_1_soporte.csv` a `cat_8_cableUSB.csv`).
-* **Ingesta y Parsing en Python:** Con el script `01_extraer_datos_simulador.py`, se automatizó la lectura e integración de los 8 archivos, interpretando las clases HTML del DOM de Mercado Libre (distinguiendo `andes-money-amount__fraction` para el precio de lista y `andes-money-amount__fraction 2` para ofertas con descuento), unificando más de 3.600 publicaciones crudas con auditoría de errores.
+Con un script de Python (`01_extraer_datos_simulador.py`) unifiqué los 8 archivos leyendo las etiquetas HTML de la página (por ejemplo `andes-money-amount__fraction` para el precio de lista y `fraction 2` para ofertas) para consolidar todo en una sola base cruda y auditar filas incompletas.
 
-### Fase 2: Limpieza y Calidad de Datos (`02_limpieza.py`)
-Los datos reales de scraping vienen sucios. Tuve que resolver varios desafíos típicos de ingeniería de datos:
-* **Detección de errores de coma y escala en precios:** Al parsear textos con separadores de miles, algunos precios quedaban truncados (ej. un producto de `$68.000` se leía como `68`). Creé una función de normalización que corrigió la escala automáticamente:
-  ```python
-  def normalizar_escala_precio(p):
-      if pd.isna(p) or p <= 0:
-          return np.nan
-      p_int = int(p)
-      if p_int < 1000:
-          return p_int * 1000  # Corrige ej: 68 -> 68.000 ARS
-      return p_int
-  ```
-* **Deduplicación estricta:** Al recorrer varias páginas de búsqueda, muchas publicaciones se repetían. Se deduplicó por `Categoria` y `Titulo`, descartando duplicados y consolidando **2.599 publicaciones únicas**.
-* **Clasificación de Vendedores:** Mercado Libre no siempre entrega una etiqueta limpia de "Tienda Oficial". Creé la bandera lógica `EsTiendaOficial` (1 vs 0) aislando vendedores particulares de cuentas corporativas verificadas.
-
-### Fase 3: Modelo Financiero con Reglas Reales (`03_modelo_financiero.py`)
-En lugar de poner un margen fijo, implementé las **Tarifas Oficiales del Portal de Vendedores de Mercado Libre Argentina (Ficha Técnica #870)**:
-1. **Comisión por Venta:**
-   * **14,5%** en publicación *Clásica* (sin cuotas).
-   * **29,5%** en publicación *Premium* (cuando ofrece Cuotas sin Interés).
-2. **Costo Fijo Unitario:**
-   * Mercado Libre cobra un cargo fijo extra de **$1.100 ARS** por cada unidad vendida cuyo precio sea **menor a $30.000 ARS**.
-3. **Cofinanciación de Envíos:**
-   * Si el precio es **>= $30.000 ARS**, el vendedor está obligado por plataforma a ofrecer **Envío Gratis**, asumiendo un costo bonificado de flete ($3.800 a $4.800 según peso/volumen).
-4. **Costo Estimado de Compra (FOB / Mayorista):**
-   * Calibrado por categoría entre el 25% y 38% del precio de venta final.
-5. **Cálculo de Rentabilidad:**
-   * **Ganancia Neta** = Precio Venta - Comisión MeLi - Costo Envío - Costo FOB
-   * **Margen Neto %** = (Ganancia Neta / Precio Venta) * 100
-   * **ROI %** = (Ganancia Neta / Costo FOB) * 100
+### Limpieza y calidad de datos con Pandas (`02_limpieza.py`)
+Los datos crudos tenían varios errores típicos de scraping que corregí con Python:
+* **Escala de precios rota:** Por problemas de formato con los puntos y comas, algunos precios quedaban mal formateados (por ejemplo, un producto de $68.000 figuraba como 68). Creé una función para detectar esos valores y corroborarlos con la publicacion, una vez confirmado se multiplican por 1.000 y recuperar el valor real en pesos.
+* **Duplicados:** Al raspar varias páginas de resultados se repetían publicaciones. Dedupliqué por título y categoría, quedando una base final limpia de **2.599 publicaciones únicas**.
+* **Clasificación de vendedores:** Separé a los vendedores particulares de las tiendas oficiales o marcas grandes.
 
 ---
 
-## 3. El Dashboard en Power BI: Decisiones de Diseño y DAX
+## El modelo de costos: reglas reales de Mercado Libre (`03_modelo_financiero.py`)
 
-![Dashboard Ejecutivo - Simulador de Rentabilidad Mercado Libre](dashboard_simulador_overview.png)
-*Vista general del tablero interactivo en Power BI: KPIs ejecutivos, ranking de márgenes, estructura de competencia y logística, comparativa financiera unitaria y panel de conclusiones estratégicas.*
+Para calcular la rentabilidad neta no inventé márgenes. Me basé en la normativa oficial del portal de vendedores de Mercado Libre Argentina (guía de costos #870):
 
-El tablero se construyó en **Power BI Desktop (`dashboard.pbix`)**, pensado con un diseño corporativo oscuro (`#0F172A`) de alto contraste:
+* **Comisión por venta:** 14,5% para publicaciones Clásicas y 29,5% para publicaciones Premium (las que ofrecen cuotas sin interés).
+* **Costo fijo:** Mercado Libre cobra un cargo fijo extra de $1.100 por cada unidad vendida que cueste menos de $30.000.
+* **Envío gratis obligatorio:** Si el producto supera los $30.000, la plataforma obliga al vendedor a dar envío gratis. El vendedor debe absorber una tarifa de flete bonificada ($3.800 para productos chicos y $4.800 para productos con más volumen como teclados o parlantes).
+* **Costo de compra estimado:** Estimé el costo de compra mayorista o de importación de referencia por categoría (entre el 25% y 38% del precio de venta).
 
-### Medidas DAX Principales
-Para evitar que publicaciones con precios extremos o promociones atípicas sesguen los datos, **usé la Mediana en lugar del Promedio**:
-
-```dax
-Ticket_Mediano_ARS = MEDIAN(simulador_meli_dataset_final[PrecioVentaARS])
-
-Margen_Neto_Mediano_Pct = MEDIAN(simulador_meli_dataset_final[MargenNetoPct]) / 1000
-
-ROI_Mediano_Pct = MEDIAN(simulador_meli_dataset_final[ROIPct]) / 1000
-
-Ganancia_Neta_Mediana_ARS = MEDIAN(simulador_meli_dataset_final[GananciaNetaARS])
-
-Costo_FOB_Mediano_ARS = MEDIAN(simulador_meli_dataset_final[CostoEstimadoCompra_FOB])
-```
-
-### Optimización Visual (Data Viz)
-* **Etiquetas de datos en Miles:** En la Comparativa Financiera, un producto accesible como *Cables USB* ($15.000) comparte eje con un *Smartwatch* ($86.500). Para que las barras más chicas no se perdieran visualmente, configuré etiquetas de datos estandarizadas en miles (`$15 mil`, `$4 mil`, `$8 mil`), logrando una lectura inmediata sin forzar la vista sobre el eje Y.
-* **Filtro interactivo (Slicer):** Selector por categoría en el encabezado que recalcula automáticamente todos los KPIs y gráficos al seleccionar un producto específico.
+Con estos parámetros calculé la **ganancia neta en pesos**, el **margen neto porcentual** y el **retorno sobre la inversión (ROI %)** para cada una de las 2.599 publicaciones.
 
 ---
 
-## 4. Conclusiones de Negocio: Las 5 Respuestas Clave
+## Visualización en Power BI
 
-Del análisis surgieron **5 hallazgos comerciales concretos** que responden la pregunta inicial:
+![Dashboard Ejecutivo](dashboard_simulador.png)
 
-| # | Categoría | Margen Neto | ROI Mediano | Diagnóstico Comercial |
-|---|---|---:|---:|---|
-| **1** | **Cargadores de Pared** | **48,2 %** | **160,7 %** | **La mejor oportunidad de entrada.** Cero competencia de tiendas oficiales (0% en la muestra). Margen y ROI excelentes. |
-| **2** | **Soportes para Notebook** | **39,6 %** | **113,1 %** | **El aliado logístico.** Al costar menos de $30.000, el comprador paga el flete en el 43% de las ventas, un gasto menos para el vendedor. |
-| **3** | **Cables USB** | **52,4 %** | **209,6 %** | **Alto margen pero con trampa.** Deja el 52% de margen, pero como el ticket es de $15.000, el costo fijo de $1.100 por venta golpea fuerte. *Recomendación:* Vender en packs de 2 o 3 unidades para diluir el costo fijo. |
-| **4** | **Powerbanks y Parlantes** | **38,8% - 43,5%** | **107% - 128%** | **Atención al flete.** Como analizamos en el caso de los Sopotes para Notebook, en este caso superan el umbral de $30.000, por lo que casi siempre obligan al vendedor a pagar el envío gratis bonificado de Mercado Envíos. |
-| **5** | **Teclados Mecánicos** | **28,7 %** | **75,5 %** | **Nicho a evitar para principiantes.** El más saturado (79% tiendas oficiales como Redragon o Logitech). Menor margen y fuerte presión por absorber cuotas sin interés (comisión del 29,5%). |
+Armé el dashboard interactivo en Power BI (`dashboard.pbix`) para facilitar la lectura de los datos.
+
+### Criterios aplicados en el reporte:
+* **Uso de medianas en vez de promedios:** En todas las medidas DAX principales usé la mediana. En marketplaces suele haber publicaciones con precios atípicos o combos gigantescos que inflan el promedio y dan una idea falsa del mercado. La mediana muestra la venta típica.
+* **Comparativa financiera unitaria:** El gráfico de columnas agrupa el precio de venta, el costo de compra y la ganancia neta en bolsillo por cada unidad vendida. Como categorías como cables USB ($15.000) comparten eje con smartwatches ($86.000), configuré etiquetas en miles para que los productos más accesibles no se pierdan a la vista.
+* **Filtro interactivo:** Selector de categoría para analizar el comportamiento individual de cada nicho.
 
 ---
 
+##  Conclusiones y recomendaciones comerciales
 
+Al cruzar margen neto, nivel de competencia de tiendas oficiales y costos de envío, encontré 5 conclusiones claras:
 
+1. **Cargadores de pared (La mejor oportunidad de entrada):** Es el nicho más conveniente para alguien que empieza. Presenta un margen neto mediano del 48% y un ROI del 160%, y en la muestra analizada no encontré marcas ni tiendas oficiales compitiendo de forma masiva (0%).
+2. **Soportes para notebook (Ventaja en logística):** Como la gran mayoría cuesta menos del umbral de $30.000, el comprador paga el flete en el 43% de las ventas. Esto evita que el vendedor tenga que absorber el costo del envío y cuida un margen neto del 39%.
+3. **Cables USB (Margen alto pero ticket bajo):** Tienen el porcentaje de ganancia más alto (52%), pero como el ticket mediano ronda los $15.000, el cargo fijo de $1.100 por venta golpea fuerte vendiendo de a una unidad. La recomendación comercial es venderlos en combos de 2 o 3 unidades para diluir ese costo fijo.
+4. **Powerbanks y Parlantes (Atención al flete obligatorio):** Tienen márgenes aceptables (38% a 43%), pero como casi todos superan los $30.000, el vendedor queda obligado a financiar el envío gratis, reduciendo la ganancia final.
+5. **Teclados mecánicos (Categoría a evitar):** Es el mercado más difícil para un vendedor particular. Deja el margen más bajo (28%), el 79% del catálogo está dominado por marcas establecidas (Logitech, Redragon) y la mayoría compite ofreciendo cuotas sin interés, lo que obliga a pagar la comisión más cara de 29,5%.
+
+---
+
+##  Estructura del repositorio
+
+* `dashboard.pbix`: Archivo de Power BI Desktop con el modelo de datos, medidas DAX y visualizaciones.
+* `dashboard_simulador.png`: Captura de pantalla en alta resolución del reporte.
+* `SCRIPTS`: Carpeta con los scripts de Python:
+  * `01_extraer_datos_simulador.py`: Ingesta y consolidación de los archivos por categoría.
+  * `02_limpieza.py`: Limpieza de formatos, corrección de escalas y duplicados.
+  * `03_modelo_financiero.py`: Cálculo de comisiones, fletes, costo FOB y márgenes.
+* `simulador_meli_dataset_final.csv`: Dataset final limpio con 2.599 publicaciones procesadas.
